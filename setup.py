@@ -7,8 +7,6 @@ requirements = [str(requirement.requirement) for requirement in list(parse_requi
 with open('README.md', 'r', encoding='utf-8') as readable_file:
     long_description = readable_file.read()
 
-long_description = "# TN3W_Utils\n" + long_description.split("# TN3W_Utils")[1]
-
 setup(
     name='tn3w_utils',
     version='1.0',
