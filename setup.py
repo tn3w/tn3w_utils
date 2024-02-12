@@ -2,8 +2,7 @@ import os
 from setuptools import setup, find_packages
 from pip._internal.req import parse_requirements
 
-if os.path.isfile("requirements.txt"):
-    requirements = [str(requirement.requirement) for requirement in list(parse_requirements("requirements.txt", session=False))]
+requirements = [str(requirement.requirement) for requirement in list(parse_requirements("requirements.txt", session=False))]
 
 with open('README.md', 'r', encoding='utf-8') as readable_file:
     long_description = readable_file.read()
