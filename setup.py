@@ -1,7 +1,9 @@
+import os
 from setuptools import setup, find_packages
 from pip._internal.req import parse_requirements
 
-requirements = [str(requirement.requirement) for requirement in list(parse_requirements("requirements.txt", session=False))]
+if os.path.isfile("requirements.txt"):
+    requirements = [str(requirement.requirement) for requirement in list(parse_requirements("requirements.txt", session=False))]
 
 with open('README.md', 'r', encoding='utf-8') as readable_file:
     long_description = readable_file.read()
@@ -20,7 +22,7 @@ setup(
     packages=find_packages(where='src'),
     package_dir={'': 'src'},
     package_data={
-        'flask_AuthGenius': ['assets/*', 'templates/*']
+        'tn3w_utils': ['languages.json']
     },
     classifiers=[
         'Development Status :: 5 - Production/Stable',
