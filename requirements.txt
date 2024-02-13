@@ -4,6 +4,6 @@ requests
 googletrans==3.1.0a0
 bs4
 pillow
-magic
+python-magic
 distro
 captcha
