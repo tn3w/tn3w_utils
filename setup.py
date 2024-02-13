@@ -8,7 +8,7 @@ with open('README.md', 'r', encoding='utf-8') as readable_file:
 
 setup(
     name='tn3w_utils',
-    version='1.0.1',
+    version='1.0.2',
     description='A consolidation of all tools created so far as a Python package',
     long_description=long_description,
     long_description_content_type='text/markdown',

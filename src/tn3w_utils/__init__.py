@@ -1,11 +1,20 @@
-from typing import Optional, Union, Tuple
+from typing import Optional, Union, Tuple, Callable, Any
 from threading import Lock
 import json
 import re
 import pkg_resources
 import os
 import hashlib
+import platform
+import shutil
+import random
+import atexit
+import subprocess
+import mimetypes
 import secrets
+from io import BytesIO
+import concurrent.futures
+from concurrent.futures import ThreadPoolExecutor
 from urllib.parse import urlparse, urlunparse, parse_qs
 from base64 import b64encode, b64decode
 from time import time
@@ -15,7 +24,7 @@ from werkzeug import Request
 #### Basic Tools ####
 #####################
 
-def generate_random_string(length: int, with_numbers: bool = True, with_letters: bool = True, with_punctuation: bool = True) -> str:
+def random_string(length: int, with_numbers: bool = True, with_letters: bool = True, with_punctuation: bool = True) -> str:
     """
     Generates a random string
 
@@ -33,6 +42,17 @@ def generate_random_string(length: int, with_numbers: bool = True, with_letters:
 
     random_string = ''.join(secrets.choice(characters) for _ in range(length))
     return random_string
+
+FONTS = [
+    pkg_resources.resource_filename('tn3w_utils', 'Comic_Sans_MS.ttf'),
+    pkg_resources.resource_filename('tn3w_utils', 'Droid_Sans_Mono.ttf'),
+    pkg_resources.resource_filename('tn3w_utils', 'Helvetica.ttf')
+]
+
+def random_font() -> str:
+    "Generates a random font file"
+
+    return secrets.choice(FONTS)
 
 def shorten_text(text: str, length: int) -> str:
     """
@@ -63,6 +83,271 @@ def reverse_list(origin_list: list) -> list:
     """
 
     return origin_list[::-1]
+
+def get_system_architecture() -> Tuple[str, str]:
+    "Function to get the correct system information"
+
+    system = platform.system()
+    if system == "Darwin":
+        system = "macOS"
+
+    machine_mappings = {
+        "AMD64": "x86_64",
+        "i386": "i686"
+    }
+
+    machine = platform.machine()
+
+    machine = machine_mappings.get(machine, "x86_64")
+
+    return system, machine
+
+def get_console_columns() -> int:
+    "Returns the console size"
+
+    if os.name == 'nt':
+        columns, _ = shutil.get_terminal_size()
+        return columns
+    else:
+        _, columns = os.popen('stty size', 'r').read().split()
+        return int(columns)
+
+def find_missing_numbers_in_range(range_start: int, range_end: int, data: list):
+    """
+    Finds missing numbers within a given range excluding the ones provided in the data.
+
+    :param range_start: The start value of the range.
+    :param range_end: The end value of the range.
+    :param data: A list containing tuples of numbers and their associated data.
+    """
+
+    numbers = list(range(range_start + 1, range_end + 1))
+    
+    for item in data:
+        if item[0] in numbers:
+            numbers.remove(item[0])
+    
+    return numbers
+
+def get_password_strength(password: str) -> int:
+    """
+    Function to get a password strength from 0 (bad) to 100% (good)
+
+    :param password: The password to check
+    """
+
+    strength = (len(password) * 62.5) / 16
+
+    if strength > 70:
+        strength = 70
+
+    if re.search(r'[A-Z]', password):
+        strength += 5
+    if re.search(r'[a-z]', password):
+        strength += 5
+    if re.search(r'[!@#$%^&*()_+{}\[\]:;<>,.?~\\]', password):
+        strength += 20
+
+    if strength > 100:
+        strength = 100
+    return round(strength)
+
+def is_password_pwned(password: str, session: Optional[Any] = None) -> bool:
+    """
+    Ask pwnedpasswords.com if password is available in data leak
+
+    :param password: Password to check against
+    :param session: a requests.Session Object (Optional)
+    """
+
+    import requests
+
+    if session is None:
+        requests.Session()
+
+    password_sha1_hash = hashlib.sha1(password.encode()).hexdigest().upper()
+    hash_prefix = password_sha1_hash[:5]
+
+    url = f"https://api.pwnedpasswords.com/range/{hash_prefix}"
+
+    while True:
+        try:
+            response = requests.get(
+                url,
+                headers = {'User-Agent': random.choice(USER_AGENTS)},
+                timeout = 5
+            )
+            response.raise_for_status()
+
+            if response.status_code == 200:
+                hashes = [line.split(':') for line in response.text.splitlines()]
+                for hash, _ in hashes:
+                    if hash == password_sha1_hash[5:]:
+                        return False         
+        except (requests.exceptions.ProxyError, requests.exceptions.ReadTimeout):
+            session = requests.Session()
+        else:
+            break
+
+    return True
+
+class EmptyWith:
+    def __enter__(self):
+        return self
+    
+    def __exit__(self, exc_type, exc_value, traceback):
+        pass
+
+def download_file(url: str, dict_path: Optional[str] = None,
+                  operation_name: Optional[str] = None, file_name: Optional[str] = None,
+                  session: Optional[Any] = None,
+                  return_as_bytes: bool = False, quite: bool = False) -> Optional[Union[str, bytes]]:
+    """
+    Function to download a file
+
+    :param url: The url of the file
+    :param dict_path: Specifies the directory where the file should be saved
+    :param operation_name: Sets the name of the operation in the console (Optional)
+    :param file_name: Sets the file name (Optional)
+    :param session: a requests.Session (Optional)
+    :param return_as_bytes: If True, the function returns a bytes instead of a file path
+    :param quite: If True nothing is written to the console
+    """
+
+    import requests
+
+    if session is None:
+        session = requests.Session()
+
+    if not return_as_bytes:
+        if file_name is None:
+            parsed_url = urlparse(url)
+            file_name = os.path.basename(parsed_url.path)
+
+        save_path = os.path.join(dict_path, file_name)
+
+        if os.path.isfile(save_path):
+            return save_path
+    
+    if not quite:
+        from rich.progress import Progress
+
+        progress = Progress()
+    else:
+        progress = EmptyWith()
+
+    with progress:
+        downloaded_bytes = 0
+
+        if not return_as_bytes:
+            file = open(save_path, 'wb')
+        else:
+            file_bytes = b''
+
+        try:
+            response = session.get(
+                url, stream=True, headers={'User-Agent': random.choice(USER_AGENTS)}, timeout=5
+            )
+            response.raise_for_status()
+        except Exception as e:
+            print(f"[Error] Error downloading the file: '{e}'")
+            return None
+
+        if response.status_code == 200:
+            total_length = response.headers.get('content-length')
+            total_length = 500000 if total_length is None else int(total_length)
+            
+            if not total_length is None and not quite:
+                if operation_name:
+                    task = progress.add_task(
+                        f"[green]Downloading {operation_name}...",
+                        total=total_length
+                    )
+                else:
+                    task = progress.add_task("[green]Downloading...", total=total_length)
+            
+            for chunk in response.iter_content(chunk_size=1024):
+                if chunk:
+                    if not return_as_bytes:
+                        file.write(chunk)
+                    else:
+                        file_bytes += chunk
+
+                    if downloaded_bytes > total_length:
+                        downloaded_bytes = total_length
+                    elif not downloaded_bytes == total_length:
+                        downloaded_bytes += len(chunk)
+
+                    if not quite:
+                        progress.update(task, completed=downloaded_bytes)
+            if not quite:
+                progress.update(task, completed=total_length)
+        else:
+            return None
+
+    if return_as_bytes:
+        return file_bytes
+
+    file.close()
+    return save_path
+
+class AtExit:
+    """
+    Manages functions to be executed at program exit.
+
+    This class provides methods to register functions to be called at program exit
+    and to remove registered functions.
+    """
+
+    def __init__(self) -> "AtExit":
+        "Initializes the AtExit object."
+
+        self.all_atexit_handlers = []
+        self.atexit_handlers = []
+    
+    def register(self, func: Callable[..., Any], *args: Any, **kwargs: Any) -> str:
+        """
+        Register a function to be called at program exit with optional arguments.
+        
+        :param func: The function to be called at exit.
+        :param *args: Optional positional arguments to be passed to the function.
+        :param **kwargs: Optional keyword arguments to be passed to the function.
+
+        :return: Unique identifier for the registered function.
+        """
+
+        atexit_id = random_string(12)
+        
+        while atexit_id in self.all_atexit_handlers:
+            atexit_id = random_string(12)
+        
+        self.all_atexit_handlers.append(atexit_id)
+        self.atexit_handlers.append(atexit_id)
+
+        def atexit_func(func, *args, **kwargs):
+            """
+            Wrapper function to call the registered function with arguments at program exit.
+            
+            :param func: The function to be called at exit.
+            :param *args: Optional positional arguments to be passed to the function.
+            :param **kwargs: Optional keyword arguments to be passed to the function.
+            """
+            if atexit_id in self.atexit_handlers:
+                func(*args, **kwargs)
+
+        atexit.register(atexit_func, func, *args, **kwargs)
+
+        return atexit_id
+
+    def remove_atexit(self, atexit_id: str):
+        """
+        Remove a registered function from the atexit handlers.
+
+        :param atexit_id: The unique identifier of the function to be removed.
+        """
+
+        if atexit_id in self.atexit_handlers:
+            self.atexit_handlers.remove(atexit_id)
 
 ####################
 #### File Tools ####
@@ -119,6 +404,85 @@ class JSON:
         
         return True
 
+class Block:
+    "Functions for saving data in blocks instead of alone"
+
+    def __init__(self, block_size: int, file_name: str) -> "Block":
+        """
+        :param block_size: How big each block is
+        :param file_name: The name of the file to write the block to.
+        """
+
+        if block_size < 0: block_size = 4000
+        self.block_size = block_size
+        self.file_name = file_name
+
+        self.executor = ThreadPoolExecutor(max_workers=5)
+
+        self.blocks = {}
+    
+    def _get_id(self, index: int) -> int:
+        """
+        Returns the nearest block index based on the given index and block size.
+
+        :param index: The index value.
+        """
+
+        remains = index % self.block_size
+        
+        if remains == 0: return index
+        return index + (self.block_size - remains)
+    
+    def _write_data(self, block_data: tuple) -> None:
+        """
+        Writes data to a file while ensuring thread safety using locks.
+
+        :param block_data: A tuple containing data to be written to the file.
+        """
+
+        if self.file_name not in file_locks:
+            file_locks[self.file_name] = Lock()
+
+        with file_locks[self.file_name]:
+            if os.path.isfile(self.file_name):
+                with open(self.file_name, "r", encoding="utf-8") as file:
+                    data = json.load(file)
+            else:
+                data = []
+
+            for _, new_data in block_data:
+                if new_data is not None:
+                    data.append(new_data)
+
+            with open(self.file_name, "w", encoding="utf-8") as file:
+                json.dump(data, file)
+    
+    def add_data(self, index: int, new_data: Optional[dict] = None) -> Tuple[bool, Optional[int]]:
+        """
+        Adds new data to the specified index in the data structure, and writes the block to file
+        if all expected data within the block range is present.
+
+        :param index: The index where the new data should be added.
+        :param new_data: The data to be added, if any.
+        """
+
+        block_id = self._get_id(index)
+
+        block = self.blocks.get(block_id, [])
+        block.append((index, new_data))
+        self.blocks[block_id] = block
+
+        missing = find_missing_numbers_in_range(block_id - self.block_size, block_id, block)
+        if 1 in missing: missing.remove(1)
+
+        if len(missing) == 0:
+            self.executor.submit(self._write_data, block)
+            
+            del self.blocks[block_id]
+
+            return True, block_id
+        return False, block_id
+
 def read(
         file_name: str,
         is_bytes: bool = False,
@@ -169,6 +533,120 @@ def write(
             encoding = "utf-8") as writeable_file:
             writeable_file.write(data)
     return True
+
+class SecureDelete:
+    "Class for secure deletion of files or folders"
+
+    @staticmethod
+    def list_files_and_directories(directory_path: str) -> Tuple[list, list]:
+        """
+        Function to get all files and directorys in a directory
+
+        :param directory_path: The path to the directory
+        """
+
+        all_files = list()
+        all_directories = list()
+
+        def list_files_recursive(root, depth):
+            for item in os.listdir(root):
+                item_path = os.path.join(root, item)
+                if os.path.isfile(item_path):
+                    all_files.append((item_path, depth))
+                elif os.path.isdir(item_path):
+                    all_directories.append((item_path, depth))
+                    list_files_recursive(item_path, depth + 1)
+
+        list_files_recursive(directory_path, 0)
+
+        all_files.sort(key=lambda x: x[1], reverse=True)
+        all_directories.sort(key=lambda x: x[1], reverse=True)
+
+        all_files = [path for path, _ in all_files]
+        all_directories = [path for path, _ in all_directories]
+
+        return all_files, all_directories
+
+    @staticmethod
+    def file(file_path: str, quite: bool = False) -> None:
+        """
+        Function to securely delete a file by replacing it first with random characters and
+        then according to Gutmann patterns and DoD 5220.22-M patterns
+
+        :param file_path: The path to the file
+        :param quite: If True nothing is written to the console
+        """
+        if not os.path.isfile(file_path):
+            return
+
+        file_size = os.path.getsize(file_path)
+        file_size_times_two = file_size * 2
+
+        gutmann_patterns = [bytes([i % 256] * (file_size_times_two)) for i in range(35)]
+        dod_patterns = [
+            bytes([0x00] * file_size_times_two),
+            bytes([0xFF] * file_size_times_two),
+            bytes([0x00] * file_size_times_two)
+        ]
+
+        for _ in range(10):
+            try:
+                if os.path.isfile(file_path):
+                    os.remove(file_path)
+
+                with open(file_path, 'wb') as file:
+                    file.write(os.urandom(file_size_times_two))
+
+                if os.path.isfile(file_path):
+                    os.remove(file_path)
+
+                with open(file_path, 'ab') as file:
+                    file.seek(0, os.SEEK_END)
+
+                    # Gutmann Pattern
+                    for pattern in gutmann_patterns:
+                        file.write(pattern)
+
+                    # DoD 5220.22-M Pattern
+                    for pattern in dod_patterns:
+                        file.write(pattern)
+            except Exception as e:
+                if not quite:
+                    print(f"[Error] Error deleting the file '{file_path}': {e}")
+
+            try:
+                os.remove(file_path)
+            except Exception as e:
+                print(f"[Error] Error deleting the file '{file_path}': {e}")
+    
+    @staticmethod
+    def directory(directory_path: str, quite: bool = False) -> None:
+        """
+        Securely deletes entire folders with files and subfolders
+
+        :param directory_path: The path to the directory
+        :param quite: If True nothing is written to the console
+        """
+
+        files, directories = SecureDelete.list_files_and_directories(directory_path)
+
+        with ThreadPoolExecutor() as executor:
+            file_futures = {executor.submit(SecureDelete.file, file, quite): file for file in files}
+
+            concurrent.futures.wait(file_futures)
+
+            for directory in directories:
+                try:
+                    shutil.rmtree(directory)
+                except Exception as e:
+                    if not quite:
+                        print(f"[Error] Error deleting directory '{directory}': {e}")
+
+            try:
+                shutil.rmtree(directory_path)
+            except Exception as e:
+                if not quite:
+                    print(f"[Error] Error deleting directory '{directory_path}': {e}")
 
 #############################
 #### Cryptographic Tools ####
@@ -834,8 +1312,8 @@ def remove_args_from_url(url: str) -> str:
 
     return url_without_args
 
-LANGUAGES_FILE_PATH = pkg_resources.resource_filename('flask_AuthGenius', 'languages.json')
-TRANSLATIONS_FILE_PATH = pkg_resources.resource_filename('flask_AuthGenius', 'translations.json')
+LANGUAGES_FILE_PATH = pkg_resources.resource_filename('tn3w_utils', 'languages.json')
+TRANSLATIONS_FILE_PATH = pkg_resources.resource_filename('tn3w_utils', 'translations.json')
 
 LANGUAGES = JSON.load(LANGUAGES_FILE_PATH)
 LANGUAGE_CODES = [language["code"] for language in LANGUAGES]
@@ -1088,3 +1566,377 @@ def render_template(
     html = WebPage.minimize(html)
 
     return html
+
+#####################
+#### Image Tools ####
+#####################
+
+def show_image_in_console(image_bytes: bytes) -> None:
+    """
+    Turns a given image into Ascii Art and prints it in the console
+
+    :param image_bytes: The bytes of the image to be displayed in the console
+    """
+
+    from PIL import Image
+
+    img = Image.open(BytesIO(image_bytes))
+
+    ascii_chars = '@%#*+=-:. '
+    width, height = img.size
+    aspect_ratio = height / width
+    new_width = get_console_columns()
+    new_height = int(aspect_ratio * new_width * 0.55)
+    img = img.resize((new_width, new_height))
+    img = img.convert('L')
+
+    pixels = img.getdata()
+    ascii_str = ''.join([ascii_chars[min(pixel // 25, len(ascii_chars) - 1)] for pixel in pixels])
+    ascii_str_len = len(ascii_str)
+    ascii_img = ''
+    for i in range(0, ascii_str_len, new_width):
+        ascii_img += ascii_str[i:i + new_width] + '\n'
+
+    print(ascii_img)
+
+def random_website_logo(name: str) -> str:
+    """
+    Generates a website logo matching the name
+
+    :param name: Name whose first two letters appear on the logo
+    """
+
+    size = 200
+    background_color = tuple(random.randint(0, 255) for _ in range(3))
+
+    from PIL import Image, ImageDraw, ImageFont
+
+    image = Image.new('RGBA', (size, size), (0, 0, 0, 0))
+    draw = ImageDraw.Draw(image)
+    draw.ellipse([(0, 0), (size, size)], fill=background_color)
+
+    brightness = 0.299 * background_color[0] + 0.587 * background_color[1] + 0.114 * background_color[2]
+    text_color = (255, 255, 255) if brightness < 128 else (0, 0, 0)
+
+    font = ImageFont.truetype(random_font(), 80)
+
+    initials = name[:2].upper()
+
+    text_bbox = draw.textbbox((0, 0), initials, font=font)
+    text_width = text_bbox[2] - text_bbox[0]
+    text_height = text_bbox[3] - text_bbox[1]
+    text_position = ((size - text_width) // 2, (size - text_height) // 2)
+
+    draw.text(text_position, initials, font=font, fill=text_color)
+
+    image_buffer = BytesIO()
+    image.save(image_buffer, format="PNG")
+
+    image_base64 = b64encode(image_buffer.getvalue()).decode("utf-8")
+    return "data:image/png;base64," + image_base64
+
+def convert_image_to_base64(file_path: str) -> Optional[str]:
+    """
+    Converts an image file into Base64 Web Format
+
+    :param file_path: The path to the image file
+    """
+
+    if not os.path.isfile(file_path):
+        return
+
+    try:
+        with open(file_path, 'rb', encoding = "utf-8") as image_file:
+            encoded_image = b64encode(image_file.read()).decode('utf-8')
+
+            mime_type, _ = mimetypes.guess_type(file_path)
+            if not mime_type:
+                mime_type = 'application/octet-stream'
+
+            data_url = f'data:{mime_type};base64,{encoded_image}'
+
+            return data_url
+    except:
+        return
+
+def is_valid_image(image_data: bytes) -> bool:
+    """
+    Checks the validity of the given image data.
+
+    :param image_data: Bytes representing the image.
+    """
+    
+    try:
+        import imghdr
+        import magic
+
+        image_format = imghdr.what(None, h=image_data)
+        if not image_format:
+            return False
+
+        mime = magic.Magic()
+        image_type = mime.from_buffer(image_data)
+
+        allowed_types = ["image/jpeg", "image/png", "image/webp"]
+
+        if image_type not in allowed_types:
+            return False
+
+        return True
+    except:
+        return False
+
+def resize_image(image_data: bytes, target_size: tuple = (100, 100)) -> Optional[bytes]:
+    """
+    Resizes the given image data to the specified target size.
+
+    :param image_data: Bytes representing the image.
+    :param target_size: Tuple representing the target size (width, height).
+    """
+
+    try:
+        from PIL import Image, ImageOps
+
+        image = Image.open(BytesIO(image_data))
+        resized_image = ImageOps.fit(image, target_size, method=0, bleed=0.0, centering=(0.5, 0.5))
+
+        bytes_io = BytesIO()
+        resized_image.save(bytes_io, format='WEBP', quality=85)
+
+        return bytes_io.getvalue()
+    except:
+        return None
+
+########################
+#### Software Tools ####
+########################
+
+def macos_get_installer_and_volume_path() -> Tuple[Optional[str], Optional[str]]:
+    "Function to automatically detect the macOS installer and the volume path"
+
+    installer_path = None
+
+    mounted_volumes = [volume for volume in os.listdir("/Volumes") if not volume.startswith(".")]
+    if mounted_volumes:
+        volume_name = mounted_volumes[0]
+        volume_path = os.path.join("/Volumes", volume_name)
+
+        for root, _, files in os.walk(volume_path):
+            for file in files:
+                if file.endswith(".app"):
+                    installer_path = os.path.join(root, file)
+                    break
+        else:
+            return None, None
+    else:
+        return None, None
+    
+    return installer_path, volume_path
+
+DISTRO_TO_PACKAGE_MANAGER = {
+    "ubuntu": {"installation_command": "apt-get install", "update_command": "apt-get update; apt-get upgrade"},
+    "debian": {"installation_command": "apt-get install", "update_command": "apt-get update; apt-get upgrade"},
+    "fedora": {"installation_command": "dnf install", "update_command": "dnf upgrade"},
+    "centos": {"installation_command": "yum install", "update_command": "yum update"},
+    "arch": {"installation_command": "pacman -S", "update_command": "pacman -Syu"},
+    "opensuse": {"installation_command": "zypper install", "update_command": "zypper update"},
+    "linuxmint": {"installation_command": "apt-get install", "update_command": "apt-get update; apt-get upgrade"},
+    "gentoo": {"installation_command": "emerge", "update_command": "emerge --sync"},
+    "rhel": {"installation_command": "yum install", "update_command": "yum update"},
+    "kali": {"installation_command": "apt-get install", "update_command": "apt-get update; apt-get upgrade"},
+    "tails": {"installation_command": "apt-get install", "update_command": "apt-get update; apt-get upgrade"},
+    "zorin": {"installation_command": "apt-get install", "update_command": "apt-get update; apt-get upgrade"},
+    "mx": {"installation_command": "apt-get install", "update_command": "apt-get update; apt-get upgrade"},
+    "solus": {"installation_command": "eopkg install", "update_command": "eopkg up"},
+    "antergos": {"installation_command": "pacman -S", "update_command": "pacman -Syu"},
+    "lubuntu": {"installation_command": "apt-get install", "update_command": "apt-get update; apt-get upgrade"},
+    "xubuntu": {"installation_command": "apt-get install", "update_command": "apt-get update; apt-get upgrade"},
+}
+PACKAGE_MANAGERS = [
+    {"version_command": "apt-get --version", "installation_command": "apt-get install", "update_command": "apt-get update; apt-get upgrade"},
+    {"version_command": "dnf --version", "installation_command": "dnf install", "update_command": "dnf upgrade"},
+    {"version_command": "yum --version", "installation_command": "yum install", "update_command": "yum update"},
+    {"version_command": "pacman --version", "installation_command": "pacman -S", "update_command": "pacman -Syu"},
+    {"version_command": "zypper --version", "installation_command": "zypper install", "update_command": "zypper update"},
+    {"version_command": "emerge --version", "installation_command": "emerge", "update_command": "emerge --sync"},
+    {"version_command": "eopkg --version", "installation_command": "eopkg install", "update_command": "eopkg up"}
+]
+
+class Linux:
+    "Collection of functions that have something to do with Linux"
+
+    @staticmethod
+    def get_package_manager() -> Tuple[Optional[str], Optional[str]]:
+        "Returns the Packet Manager install command and the update command"
+
+        import distro
+
+        distro_id = distro.id()
+
+        package_manager = DISTRO_TO_PACKAGE_MANAGER.get(
+            distro_id, {"installation_command": None, "update_command": None}
+        )
+
+        installation_command, update_command = package_manager["installation_command"], package_manager["update_command"]
+
+        if None in [installation_command, update_command]:
+            for package_manager in PACKAGE_MANAGERS:
+                try:
+                    subprocess.check_call(package_manager["version_command"], shell=True)
+                except:
+                    pass
+                else:
+                    installation_command, update_command = package_manager["installation_command"], package_manager["update_command"]
+
+        return installation_command, update_command
+
+    @staticmethod
+    def install_package(package_name: str, quite: bool = False) -> None:
+        """
+        Attempts to install a Linux package
+        
+        :param package_name: Name of the Linux packet
+        :param quite: If True nothing is written to the console
+        """
+
+        if not quite:
+            from rich.console import Console
+            console = Console()
+
+            with console.status("[green]Trying to get package manager..."):
+                installation_command, update_command = Linux.get_package_manager()
+            console.print(f"[green]~ Package Manager is `{installation_command.split(' ')[0]}`")
+
+        if not None in [installation_command, update_command]:
+            try:
+                update_process = subprocess.Popen("sudo " + update_command, shell=True)
+                update_process.wait()
+            except Exception as e:
+                if not quite:
+                    print(f"[Error] Error using update Command while installing linux package '{package_name}': '{e}'")
+
+            install_process = subprocess.Popen(f"sudo {installation_command} {package_name} -y", shell=True)
+            install_process.wait()
+        else:
+            print("[Error] No packet manager found for the current Linux system, you seem to use a distribution we don't know?")
+
+        return None
+
+class GnuPG:
+    "All functions that have something to do with GnuPG"
+
+    def get_path() -> str:
+        "Function to query the GnuPG path"
+
+        system = get_system_architecture()
+
+        gnupg_path = {
+            "Windows": r"C:\Program Files (x86)\GnuPG\bin\gpg.exe",
+            "macOS": "/usr/local/bin/gpg"
+        }.get(system, "/usr/bin/gpg")
+
+        if os.path.isfile(gnupg_path):
+            return gnupg_path
+
+        command = {"Windows": "where gpg"}.get(system, "which gpg")
+
+        try:
+            result = subprocess.check_output(command, shell=True, text=True)
+            gnupg_path = result.strip()
+        except Exception as e:
+            print(f"[Error] Error when requesting pgp: '{e}'\n")
+
+        return gnupg_path
+    
+    def get_download_link(session: Optional[Any] = None) -> Optional[str]:
+        "Request https://gnupg.org/download/ or https://gpgtools.org/ to get the latest download link"
+
+        import requests
+
+        if session is None:
+            requests.Session()
+
+        system = get_system_architecture()
+        
+        url = {"Windows": "https://gnupg.org/download/"}.get(system, "https://gpgtools.org/")
+
+        while True:
+            try:
+                response = session.get(
+                    url,
+                    headers={'User-Agent': random.choice(USER_AGENTS)},
+                    timeout = 5
+                )
+                response.raise_for_status()
+            except (requests.exceptions.ProxyError, requests.exceptions.ReadTimeout):
+                session = requests.Session()
+            else:
+                break
+        
+        from bs4 import BeautifulSoup
+
+        soup = BeautifulSoup(response.text, 'html.parser')
+        anchors = soup.find_all('a')
+
+        download_url = None
+        for anchor in anchors:
+            href = anchor.get('href')
+
+            if href:
+                if ("/ftp/gcrypt/binary/gnupg-w32-" in href and ".exe" in href and not ".sig" in href and system == "Windows"):
+                    download_url = "https://gnupg.org" + href
+                    break
+                elif ("https://releases.gpgtools.com/GPG_Suite-" in href and ".dmg" in href and not ".sig" in href and system == "macOS"):
+                    download_url = href
+                    break
+
+        return download_url
+
+class Captcha:
+    "Class to generate and verify a captcha"
+
+    def __init__(self, captcha_secret: str, data: dict):
+        """
+        :param captcha_secret: A secret token that only the server knows to verify the captcha
+        """
+
+        self.captcha_secret = captcha_secret
+        self.data = data
+    
+    def generate(self) -> Tuple[str, str]:
+        "Generate a captcha for the client"
+
+        image_captcha_code = random_string(secrets.choice([8,9,10,11,12]), with_punctuation=False)
+
+        minimized_data = json.dumps(self.data, indent = None, separators = (',', ':'))
+        captcha_prove = image_captcha_code + "//" + minimized_data
+
+        crypted_captcha_prove = SymmetricEncryption(self.captcha_secret).encrypt(captcha_prove)
+
+        from captcha.image import ImageCaptcha
+
+        image_captcha = ImageCaptcha(width=320, height=120, fonts=FONTS)
+
+        captcha_image = image_captcha.generate(image_captcha_code)
+        captcha_image_data = b64encode(captcha_image.getvalue()).decode('utf-8')
+        captcha_image_data = "data:image/png;base64," + captcha_image_data
+
+        return captcha_image_data, crypted_captcha_prove
+    
+    def verify(self, client_input: str, crypted_captcha_prove: str) -> bool:
+        """
+        Verify a captcha
+
+        :param client_input: The input from the client
+        :param crypted_captcha_prove: The encrypted captcha prove generated by the generate function
+        """
+
+        try:
+            captcha_prove = SymmetricEncryption(self.captcha_secret).decrypt(crypted_captcha_prove)
+
+            captcha_code, data = captcha_prove.split("//")
+            data = json.loads(data)
+        except:
+            return False
+
+        return bool(not (data != self.data or captcha_code.lower() != client_input.lower()))
