@@ -8,17 +8,23 @@ with open('README.md', 'r', encoding='utf-8') as readable_file:
 
 setup(
     name='tn3w_utils',
-    version='1.0.6',
+    version='1.0.7',
     description='A consolidation of all tools created so far as a Python package',
     long_description=long_description,
     long_description_content_type='text/markdown',
     author='TN3W',
     author_email='tn3wA8xxfuVMs2@proton.me',
     url='https://github.com/tn3w/tn3w_utils',
-    packages=find_packages(where='src'),
+    packages=find_packages(where = 'src'),
     package_dir={'': 'src'},
     package_data={
-        'tn3w_utils': ['languages.json']
+        'tn3w_utils': 
+            [
+                'languages.json',
+                'Comic_Sans_MS.ttf',
+                'Droid_Sans_Mono.ttf',
+                'Helvetica.ttf'
+            ]
     },
     classifiers=[
         'Development Status :: 5 - Production/Stable',
