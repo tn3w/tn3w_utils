@@ -1,8 +1,12 @@
+"""
+Module with useful tools from TN3W under Apache-2.0 licenses
+*~* https://github.com/tn3w/tn3w_utils *~*
+"""
+
 from typing import Optional, Union, Tuple, Callable, Any
 from threading import Lock
 import json
 import re
-import pkg_resources
 import os
 import hashlib
 import platform
@@ -18,13 +22,17 @@ from concurrent.futures import ThreadPoolExecutor
 from urllib.parse import urlparse, urlunparse, parse_qs
 from base64 import b64encode, b64decode
 from time import time
+import pkg_resources
 from werkzeug import Request
 
 #####################
 #### Basic Tools ####
 #####################
 
-def random_string(length: int, with_numbers: bool = True, with_letters: bool = True, with_punctuation: bool = True) -> str:
+def random_string(
+        length: int, with_numbers: bool = True, with_letters: bool = True,
+        with_punctuation: bool = True
+        ) -> str:
     """
     Generates a random string
 
@@ -36,12 +44,15 @@ def random_string(length: int, with_numbers: bool = True, with_letters: bool = T
 
     characters = ""
 
-    if with_numbers: characters += "0123456789"
-    if with_punctuation: characters += r"!\"#$%&'()*+,-.:;<=>?@[\]^_`{|}~"
-    if with_letters: characters += "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ"
+    if with_numbers:
+        characters += "0123456789"
+    if with_punctuation:
+        characters += r"!\"#$%&'()*+,-.:;<=>?@[\]^_`{|}~"
+    if with_letters:
+        characters += "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ"
 
-    random_string = ''.join(secrets.choice(characters) for _ in range(length))
-    return random_string
+    generated_random_string = ''.join(secrets.choice(characters) for _ in range(length))
+    return generated_random_string
 
 FONTS = [
     pkg_resources.resource_filename('tn3w_utils', 'Comic_Sans_MS.ttf'),
@@ -122,11 +133,11 @@ def find_missing_numbers_in_range(range_start: int, range_end: int, data: list):
     """
 
     numbers = list(range(range_start + 1, range_end + 1))
-    
+
     for item in data:
         if item[0] in numbers:
             numbers.remove(item[0])
-    
+
     return numbers
 
 def get_password_strength(password: str) -> int:
@@ -136,10 +147,7 @@ def get_password_strength(password: str) -> int:
     :param password: The password to check
     """
 
-    strength = (len(password) * 62.5) / 16
-
-    if strength > 70:
-        strength = 70
+    strength = min((len(password) * 62.5) / 16, 70)
 
     if re.search(r'[A-Z]', password):
         strength += 5
@@ -148,8 +156,8 @@ def get_password_strength(password: str) -> int:
     if re.search(r'[!@#$%^&*()_+{}\[\]:;<>,.?~\\]', password):
         strength += 20
 
-    if strength > 100:
-        strength = 100
+    strength = min(strength, 100)
+
     return round(strength)
 
 def is_password_pwned(password: str, session: Optional[Any] = None) -> bool:
@@ -181,8 +189,8 @@ def is_password_pwned(password: str, session: Optional[Any] = None) -> bool:
 
             if response.status_code == 200:
                 hashes = [line.split(':') for line in response.text.splitlines()]
-                for hash, _ in hashes:
-                    if hash == password_sha1_hash[5:]:
+                for password_hash, _ in hashes:
+                    if password_hash == password_sha1_hash[5:]:
                         return False         
         except (requests.exceptions.ProxyError, requests.exceptions.ReadTimeout):
             session = requests.Session()
@@ -192,16 +200,21 @@ def is_password_pwned(password: str, session: Optional[Any] = None) -> bool:
     return True
 
 class EmptyWith:
+    "A class that provides a no-operation (dummy) implementation of an with Statement."
+
     def __enter__(self):
         return self
-    
+
     def __exit__(self, exc_type, exc_value, traceback):
         pass
 
 def download_file(url: str, dict_path: Optional[str] = None,
-                  operation_name: Optional[str] = None, file_name: Optional[str] = None,
+                  operation_name: Optional[str] = None,
+                  file_name: Optional[str] = None,
                   session: Optional[Any] = None,
-                  return_as_bytes: bool = False, quite: bool = False) -> Optional[Union[str, bytes]]:
+                  return_as_bytes: bool = False, 
+                  quite: bool = False
+                  ) -> Optional[Union[str, bytes]]:
     """
     Function to download a file
 
@@ -228,7 +241,7 @@ def download_file(url: str, dict_path: Optional[str] = None,
 
         if os.path.isfile(save_path):
             return save_path
-    
+
     if not quite:
         from rich.progress import Progress
 
@@ -256,7 +269,7 @@ def download_file(url: str, dict_path: Optional[str] = None,
         if response.status_code == 200:
             total_length = response.headers.get('content-length')
             total_length = 500000 if total_length is None else int(total_length)
-            
+
             if not total_length is None and not quite:
                 if operation_name:
                     task = progress.add_task(
@@ -265,7 +278,7 @@ def download_file(url: str, dict_path: Optional[str] = None,
                     )
                 else:
                     task = progress.add_task("[green]Downloading...", total=total_length)
-            
+
             for chunk in response.iter_content(chunk_size=1024):
                 if chunk:
                     if not return_as_bytes:
@@ -304,7 +317,7 @@ class AtExit:
 
         self.all_atexit_handlers = []
         self.atexit_handlers = []
-    
+
     def register(self, func: Callable[..., Any], *args: Any, **kwargs: Any) -> str:
         """
         Register a function to be called at program exit with optional arguments.
@@ -317,10 +330,10 @@ class AtExit:
         """
 
         atexit_id = random_string(12)
-        
+
         while atexit_id in self.all_atexit_handlers:
             atexit_id = random_string(12)
-        
+
         self.all_atexit_handlers.append(atexit_id)
         self.atexit_handlers.append(atexit_id)
 
@@ -371,7 +384,7 @@ class JSON:
             if default is None:
                 return {}
             return default
-        
+
         if file_name not in file_locks:
             file_locks[file_name] = Lock()
 
@@ -379,7 +392,7 @@ class JSON:
             with open(file_name, "r", encoding = "utf-8") as file:
                 data = json.load(file)
             return data
-    
+
     @staticmethod
     def dump(data: Union[dict, list], file_name: str) -> bool:
         """
@@ -394,14 +407,14 @@ class JSON:
         file_directory = os.path.dirname(file_name)
         if not os.path.isdir(file_directory):
             return False
-        
+
         if file_name not in file_locks:
             file_locks[file_name] = Lock()
 
         with file_locks[file_name]:
             with open(file_name, "w", encoding = "utf-8") as file:
                 json.dump(data, file)
-        
+
         return True
 
 class Block:
@@ -413,14 +426,16 @@ class Block:
         :param file_name: The name of the file to write the block to.
         """
 
-        if block_size < 0: block_size = 4000
+        if block_size < 0:
+            block_size = 4000
+
         self.block_size = block_size
         self.file_name = file_name
 
         self.executor = ThreadPoolExecutor(max_workers=5)
 
         self.blocks = {}
-    
+
     def _get_id(self, index: int) -> int:
         """
         Returns the nearest block index based on the given index and block size.
@@ -429,10 +444,12 @@ class Block:
         """
 
         remains = index % self.block_size
-        
-        if remains == 0: return index
+
+        if remains == 0:
+            return index
+
         return index + (self.block_size - remains)
-    
+
     def _write_data(self, block_data: tuple) -> None:
         """
         Writes data to a file while ensuring thread safety using locks.
@@ -456,7 +473,7 @@ class Block:
 
             with open(self.file_name, "w", encoding="utf-8") as file:
                 json.dump(data, file)
-    
+
     def add_data(self, index: int, new_data: Optional[dict] = None) -> Tuple[bool, Optional[int]]:
         """
         Adds new data to the specified index in the data structure, and writes the block to file
@@ -473,11 +490,12 @@ class Block:
         self.blocks[block_id] = block
 
         missing = find_missing_numbers_in_range(block_id - self.block_size, block_id, block)
-        if 1 in missing: missing.remove(1)
+        if 1 in missing:
+            missing.remove(1)
 
         if len(missing) == 0:
             self.executor.submit(self._write_data, block)
-            
+
             del self.blocks[block_id]
 
             return True, block_id
@@ -489,16 +507,19 @@ def read(
         default: any = None
         ) -> Optional[any]:
     """
-    Reads the content of a file and returns it as either a string or bytes, depending on the 'is_bytes' parameter.
+    Reads the content of a file and returns it as either a string or bytes,
+    depending on the 'is_bytes' parameter.
     
     :param file_name: The name of the file to be read.
-    :param is_bytes: If True, the content will be returned as bytes; if False, the content will be returned as a string.
-    :param default: The value to return if the file does not exist or cannot be read. Defaults to None.
+    :param is_bytes: If True, the content will be returned as bytes; if False,
+                     the content will be returned as a string.
+    :param default: The value to return if the file does not exist or
+                    cannot be read. Defaults to None.
     """
 
     if not os.path.isfile(file_name):
         return default
-    
+
     if file_name not in file_locks:
         file_locks[file_name] = Lock()
 
@@ -518,13 +539,14 @@ def write(
 
     :param data: The data to be written to the file.
     :param file_name: The name of the file to write to.
-    :param is_bytes: If True, the data will be written as bytes; if False, the data will be written as a string.
+    :param is_bytes: If True, the data will be written as bytes;
+                     if False, the data will be written as a string.
     """
 
     file_directory = os.path.dirname(file_name)
     if not os.path.isdir(file_directory):
         return False
-    
+
     if file_name not in file_locks:
         file_locks[file_name] = Lock()
 
@@ -545,8 +567,8 @@ class SecureDelete:
         :param directory_path: The path to the directory
         """
 
-        all_files = list()
-        all_directories = list()
+        all_files = []
+        all_directories = []
 
         def list_files_recursive(root, depth):
             for item in os.listdir(root):
@@ -618,7 +640,7 @@ class SecureDelete:
                 os.remove(file_path)
             except Exception as e:
                 print(f"[Error] Error deleting the file '{file_path}': {e}")
-    
+
     @staticmethod
     def directory(directory_path: str, quite: bool = False) -> None:
         """
@@ -736,7 +758,7 @@ class Hashing:
                 if not isinstance(salt, bytes):
                     try:
                         salt = bytes.fromhex(salt)
-                    except:
+                    except Exception:
                         salt = salt.encode('utf-8')
         else:
             salt = None
@@ -846,7 +868,7 @@ class SymmetricEncryption:
 
         salt, iv, cipher_text = cipher_text[:self.salt_length], cipher_text[
             self.salt_length:self.salt_length + 16], cipher_text[self.salt_length + 16:]
-        
+
         from cryptography.hazmat.backends import default_backend
         from cryptography.hazmat.primitives import hashes, padding as sym_padding
         from cryptography.hazmat.primitives.kdf.pbkdf2 import PBKDF2HMAC
@@ -895,7 +917,7 @@ class AsymmetricEncryption:
             self.priv_key = serialization.load_der_private_key(
                 b64decode(private_key.encode("utf-8")), password=None, backend=default_backend()
             )
-            
+
             if self.publ_key is None:
                 self.publ_key = self.priv_key.public_key()
                 self.public_key = b64encode(self.publ_key.public_bytes(
@@ -943,7 +965,9 @@ class AsymmetricEncryption:
         """
 
         if self.publ_key is None:
-            raise ValueError("The public key cannot be None in encode, this error occurs because no public key was specified when initializing the AsymmetricCrypto function and none was generated with generate_keys.")
+            raise ValueError("""The public key cannot be None in encode, this error occurs because
+                             no public key was specified when initializing the AsymmetricCrypto function and
+                             none was generated with generate_keys.""")
 
         symmetric_key = secrets.token_bytes(64)
 
@@ -974,7 +998,9 @@ class AsymmetricEncryption:
         """
 
         if self.priv_key is None:
-            raise ValueError("The private key cannot be None in decode, this error occurs because no private key was specified when initializing the AsymmetricCrypto function and none was generated with generate_keys.")
+            raise ValueError("""The private key cannot be None in decode, this error occurs because
+                             no private key was specified when initializing the AsymmetricCrypto function and
+                             none was generated with generate_keys.""")
 
         encrypted_key, cipher_text = cipher_text.split("//")[0], cipher_text.split("//")[1]
         encrypted_symmetric_key = b64decode(encrypted_key.encode('utf-8'))
@@ -1006,11 +1032,13 @@ class AsymmetricEncryption:
         """
 
         if self.priv_key is None:
-            raise ValueError("The private key cannot be None in sign, this error occurs because no private key was specified when initializing the AsymmetricCrypto function and none was generated with generate_keys.")
+            raise ValueError("""The private key cannot be None in sign, this error occurs because
+                             no private key was specified when initializing the AsymmetricCrypto function and
+                             none was generated with generate_keys.""")
 
         if isinstance(plain_text, str):
             plain_text = plain_text.encode()
-        
+
         from cryptography.hazmat.primitives import hashes
         from cryptography.hazmat.primitives.asymmetric import padding as asy_padding
 
@@ -1036,7 +1064,9 @@ class AsymmetricEncryption:
         """
 
         if self.publ_key is None:
-            raise ValueError("The public key cannot be None in verify_sign, this error occurs because no public key was specified when initializing the AsymmetricCrypto function and none was generated with generate_keys.")
+            raise ValueError("""The public key cannot be None in verify_sign, this error occurs
+                             because no public key was specified when initializing the AsymmetricCrypto function and
+                             none was generated with generate_keys.""")
 
         if isinstance(plain_text, str):
             plain_text = plain_text.encode()
@@ -1062,6 +1092,22 @@ class AsymmetricEncryption:
         except:
             return False
 
+class NoEncryption:
+    "A class that provides a no-operation (dummy) implementation for encryption and decryption."
+
+    def __init__(self):
+        pass
+
+    def encrypt(self = None, plain_text: str = "Dummy") -> str:
+        "Dummy encryption method that returns the input plain text unchanged"
+
+        return plain_text
+
+    def decrypt(self = None, cipher_text: str = "Dummy") -> str:
+        "Dummy decryption method that returns the input cipher text unchanged"
+
+        return cipher_text
+
 def derive_password(
         password: str, salt: Optional[bytes] = None
         ) -> Tuple[str, bytes]:
@@ -1069,7 +1115,8 @@ def derive_password(
     Derives a secure password hash using PBKDF2-HMAC algorithm.
 
     :param password: The input password to be hashed.
-    :param salt: (Optional) A random byte string used as a salt. If not provided, a 32-byte random salt will be generated.
+    :param salt: (Optional) A random byte string used as a salt. If not provided,
+                 a 32-byte random salt will be generated.
     """
 
     if salt is None:
@@ -1094,7 +1141,14 @@ def derive_password(
 #### User-Agent Tools ####
 ##########################
 
-USER_AGENTS = ["Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.3", "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/16.6 Safari/605.1.1", "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_12_6) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/103.0.0.0 Safari/537.3", "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_13_6) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/13.1.2 Safari/605.1.1", "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.2 Safari/605.1.1", "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.0 Safari/605.1.1"]
+USER_AGENTS = [
+    "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.3",
+    "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/16.6 Safari/605.1.1",
+    "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_12_6) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/103.0.0.0 Safari/537.3",
+    "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_13_6) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/13.1.2 Safari/605.1.1",
+    "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.2 Safari/605.1.1",
+    "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.0 Safari/605.1.1"
+    ]
 
 def random_ua() -> str:
     "Generates a random user agent"
@@ -1135,6 +1189,28 @@ def ipv4_to_ipv6(ipv4_address: str) -> Optional[str]:
 
     return str(ipv6_minimized)
 
+UNWANTED_IPS = ["127.0.0.1", "192.168.0.1", "10.0.0.1", "192.0.2.1", "198.51.100.1", "203.0.113.1"]#
+IPV4_PATTERN = r'^(\d{1,3}\.){3}\d{1,3}$'
+IPV6_PATTERN = (
+    r'^('
+    r'([0-9a-fA-F]{1,4}:){7}[0-9a-fA-F]{1,4}|:'
+    r'|::([0-9a-fA-F]{1,4}:){0,6}[0-9a-fA-F]{1,4}'
+    r'|[0-9a-fA-F]{1,4}::([0-9a-fA-F]{1,4}:){0,5}[0-9a-fA-F]{1,4}'
+    r'|([0-9a-fA-F]{1,4}:){1,2}:([0-9a-fA-F]{1,4}:){0,4}[0-9a-fA-F]{1,4}'
+    r'|([0-9a-fA-F]{1,4}:){1,3}:([0-9a-fA-F]{1,4}:){0,3}[0-9a-fA-F]{1,4}'
+    r'|([0-9a-fA-F]{1,4}:){1,4}:([0-9a-fA-F]{1,4}:){0,2}[0-9a-fA-F]{1,4}'
+    r'|([0-9a-fA-F]{1,4}:){1,5}:([0-9a-fA-F]{1,4}:){0,1}[0-9a-fA-F]{1,4}'
+    r'|([0-9a-fA-F]{1,4}:){1,6}:[0-9a-fA-F]{1,4}'
+    r'|([0-9a-fA-F]{1,4}:){1,7}|:((:[0-9a-fA-F]{1,4}){1,7}|:)'
+    r'|([0-9a-fA-F]{1,4}:)(:[0-9a-fA-F]{1,4}){1,7}'
+    r'|([0-9a-fA-F]{1,4}:){2}(:[0-9a-fA-F]{1,4}){1,6}'
+    r'|([0-9a-fA-F]{1,4}:){3}(:[0-9a-fA-F]{1,4}){1,5}'
+    r'|([0-9a-fA-F]{1,4}:){4}(:[0-9a-fA-F]{1,4}){1,4}'
+    r'|([0-9a-fA-F]{1,4}:){5}(:[0-9a-fA-F]{1,4}){1,3}'
+    r'|([0-9a-fA-F]{1,4}:){6}(:[0-9a-fA-F]{1,4}){1,2}'
+    r'|([0-9a-fA-F]{1,4}:){7}(:[0-9a-fA-F]{1,4}):)$'
+)
+
 def is_valid_ip(ip_address: Optional[str] = None) -> bool:
     """
     Checks whether the current Ip is valid
@@ -1144,14 +1220,11 @@ def is_valid_ip(ip_address: Optional[str] = None) -> bool:
 
     if not isinstance(ip_address, str)\
         or ip_address is None\
-        or ip_address in ["127.0.0.1", "192.168.0.1", "10.0.0.1", "192.0.2.1", "198.51.100.1", "203.0.113.1"]:
+        or ip_address in UNWANTED_IPS:
         return False
 
-    ipv4_pattern = r'^(\d{1,3}\.){3}\d{1,3}$'
-    ipv6_pattern = r'^(([0-9a-fA-F]{1,4}:){7}[0-9a-fA-F]{1,4}|:|::([0-9a-fA-F]{1,4}:){0,6}[0-9a-fA-F]{1,4}|[0-9a-fA-F]{1,4}::([0-9a-fA-F]{1,4}:){0,5}[0-9a-fA-F]{1,4}|([0-9a-fA-F]{1,4}:){1,2}:([0-9a-fA-F]{1,4}:){0,4}[0-9a-fA-F]{1,4}|([0-9a-fA-F]{1,4}:){1,3}:([0-9a-fA-F]{1,4}:){0,3}[0-9a-fA-F]{1,4}|([0-9a-fA-F]{1,4}:){1,4}:([0-9a-fA-F]{1,4}:){0,2}[0-9a-fA-F]{1,4}|([0-9a-fA-F]{1,4}:){1,5}:([0-9a-fA-F]{1,4}:){0,1}[0-9a-fA-F]{1,4}|([0-9a-fA-F]{1,4}:){1,6}:[0-9a-fA-F]{1,4}|([0-9a-fA-F]{1,4}:){1,7}|:((:[0-9a-fA-F]{1,4}){1,7}|:)|([0-9a-fA-F]{1,4}:)(:[0-9a-fA-F]{1,4}){1,7}|([0-9a-fA-F]{1,4}:){2}(:[0-9a-fA-F]{1,4}){1,6}|([0-9a-fA-F]{1,4}:){3}(:[0-9a-fA-F]{1,4}){1,5}|([0-9a-fA-F]{1,4}:){4}(:[0-9a-fA-F]{1,4}){1,4}|([0-9a-fA-F]{1,4}:){5}(:[0-9a-fA-F]{1,4}){1,3}|([0-9a-fA-F]{1,4}:){6}(:[0-9a-fA-F]{1,4}){1,2}|([0-9a-fA-F]{1,4}:){7}(:[0-9a-fA-F]{1,4}):)$'
-
-    ipv4_regex = re.compile(ipv4_pattern)
-    ipv6_regex = re.compile(ipv6_pattern)
+    ipv4_regex = re.compile(IPV4_PATTERN)
+    ipv6_regex = re.compile(IPV6_PATTERN)
 
     if ipv4_regex.match(ip_address):
         octets = ip_address.split('.')
@@ -1184,7 +1257,7 @@ def get_client_ip(request: Request) -> Optional[str]:
         if is_valid_ip(client_ip):
             client_ip = shorten_ipv6(client_ip)
             return client_ip
-    
+
     try:
         client_ip = request.headers.getlist("X-Forwarded-For")[0].rpartition(' ')[-1]
     except:
@@ -1193,7 +1266,7 @@ def get_client_ip(request: Request) -> Optional[str]:
         if is_valid_ip(client_ip):
             client_ip = shorten_ipv6(client_ip)
             return client_ip
-    
+
     headers_to_check = [
         'X-Forwarded-For',
         'X-Real-Ip',
@@ -1208,7 +1281,7 @@ def get_client_ip(request: Request) -> Optional[str]:
             if is_valid_ip(client_ip):
                 client_ip = shorten_ipv6(client_ip)
                 return client_ip
-    
+
     return None
 
 IP_API_CACHE_PATH = pkg_resources.resource_filename('tn3w_utils', 'ipapi-cache.json')
@@ -1223,7 +1296,8 @@ def get_ip_info(
 
     :param ip_address: The client IP
     :param cache_path: Path to the file where results are to be cached
-    :param save_securely: Whether Ip addresses are hashed and data encrypted to protect private information
+    :param save_securely: Whether Ip addresses are hashed and data
+                          encrypted to protect private information
     """
 
     if not isinstance(cache_path, str):
@@ -1237,23 +1311,27 @@ def get_ip_info(
         if int(time()) - int(ip_data["time"]) > 518400:
             del ip_api_cache_copy[client_ip]
         else:
-            if found_ip_data is not None: continue
+            if found_ip_data is not None:
+                continue
+
             if isinstance(ip_data["data"], dict):
                 if client_ip == ip_address:
                     found_ip_data = ip_data["data"]
+
             elif isinstance(ip_data["data"], str):
                 comparison = FastHashing().compare(ip_address, client_ip)
                 if comparison:
                     try:
                         decrypted_data = SymmetricEncryption(ip_address).decrypt(ip_data["data"])
-                        found_ip_data = json.load(decrypted_data)
+                        if decrypted_data is not None:
+                            found_ip_data = json.load(decrypted_data)
                     except:
                         pass
 
     if len(ip_api_cache) != len(ip_api_cache_copy):
         ip_api_cache = ip_api_cache_copy
         JSON.dump(cache_path, ip_api_cache)
-    
+
     import requests
     try:
         response = requests.get(
@@ -1273,7 +1351,7 @@ def get_ip_info(
             new_data = {"time": int(time())}
             if save_securely:
                 response_string = json.dumps(data, separators=(',', ':'), ensure_ascii=False)
-                
+
                 crypted_response = SymmetricEncryption(ip_address).encrypt(response_string)
                 new_data["data"] = crypted_response
 
@@ -1287,7 +1365,7 @@ def get_ip_info(
             del data["time"]
 
             return data
-        
+
     return None
 
 ###################
@@ -1320,7 +1398,7 @@ LANGUAGE_CODES = [language["code"] for language in LANGUAGES]
 
 class WebPage:
     "Class with useful tools for WebPages"
-    
+
     @staticmethod
     def client_language(request: Request, default: Optional[str] = None) -> Tuple[str, bool]:
         """
@@ -1348,15 +1426,16 @@ class WebPage:
         if chosen_language is None:
             preferred_language = request.accept_languages.best_match(LANGUAGE_CODES)
 
-            if preferred_language != None:
+            if preferred_language is not None:
                 return preferred_language, False
         else:
             return chosen_language, False
-        
-        if default is None: default = "en"
+
+        if default is None:
+            default = "en"
 
         return default, True
-    
+
     @staticmethod
     def _minimize_tag_content(html: str, tag: str) -> str:
         """
@@ -1367,7 +1446,7 @@ class WebPage:
         """
 
         tag_pattern = rf'<{tag}\b[^>]*>(.*?)<\/{tag}>'
-        
+
         def minimize_tag_content(match: re.Match):
             content = match.group(1)
             content = re.sub(r'\s+', ' ', content)
@@ -1389,7 +1468,7 @@ class WebPage:
         html = WebPage._minimize_tag_content(html, 'script')
         html = WebPage._minimize_tag_content(html, 'style')
         return html
-    
+
     @staticmethod
     def _translate_text(text_to_translate: str, from_lang: str, to_lang: str) -> str:
         """
@@ -1402,24 +1481,32 @@ class WebPage:
 
         if from_lang == to_lang:
             return text_to_translate
-        
+
         translations = JSON.load(TRANSLATIONS_FILE_PATH, [])
-        
+
         for translation in translations:
             if translation["text_to_translate"] == text_to_translate\
                 and translation["from_lang"] == from_lang\
                     and translation["to_lang"] == to_lang:
                 return translation["translated_output"]
-        
+
         from googletrans import Translator
         translator = Translator()
 
         try:
-            translated_output = translator.translate(text_to_translate, src=from_lang, dest=to_lang).text
-            translated_output = translated_output.encode('latin-1').decode('unicode_escape')
+            translated_output = translator.translate(
+                text_to_translate, src=from_lang, dest=to_lang
+                ).text
+
+            if translated_output is not None:
+                translated_output = translated_output\
+                    .encode('latin-1')\
+                    .decode('unicode_escape')
+            else:
+                return text_to_translate
         except:
             return text_to_translate
-        
+
         translation = {
             "text_to_translate": text_to_translate, 
             "from_lang": from_lang,
@@ -1427,14 +1514,14 @@ class WebPage:
             "translated_output": translated_output
         }
         translations.append(translation)
-        
+
         JSON.dump(translations, TRANSLATIONS_FILE_PATH)
 
         if to_lang in ["de", "en", "es", "fr", "pt", "it"]:
             translated_output = translated_output[0].upper() + translated_output[1:]
-        
+
         return translated_output
-    
+
     @staticmethod
     def translate(html: str, from_lang: str, to_lang: str) -> str:
         """
@@ -1446,7 +1533,7 @@ class WebPage:
         """
 
         from bs4 import BeautifulSoup
-        
+
         soup = BeautifulSoup(html, 'html.parser')
 
         def translate_htmlified_text(html_tag):
@@ -1457,38 +1544,42 @@ class WebPage:
                 text = ''.join(str(tag) for tag in outer_tag.contents)
             except:
                 text = html_tag.text
-                        
+      
             if "<" in text:
                 pattern = r'(<.*?>)(.*?)(<\/.*?>)'
-        
+
                 def replace(match):
                     tag_open, content, tag_close = match.groups()
                     processed_content = WebPage._translate_text(content, from_lang, to_lang)
                     return f'{tag_open}{processed_content}{tag_close}'
-                
+
                 modified_text = re.sub(pattern, replace, text)
             else:
                 modified_text = WebPage._translate_text(text, from_lang, to_lang)
             return modified_text
-        
+
         tags = soup.find_all(['h1', 'h2', 'h3', 'h4', 'h5', 'h6', 'a', 'p', 'button'])
         for tag in tags:
             if 'ntr' not in tag.attrs:
                 translated_html = translate_htmlified_text(tag)
                 tag.clear()
                 tag.append(BeautifulSoup(translated_html, 'html.parser'))
-        
+
         inputs = soup.find_all('input')
         for input_tag in inputs:
             if input_tag.has_attr('placeholder') and 'ntr' not in input_tag.attrs:
-                input_tag['placeholder'] = WebPage._translate_text(input_tag['placeholder'], from_lang, to_lang)
-        
+                input_tag['placeholder'] = WebPage._translate_text(
+                    input_tag['placeholder'], from_lang, to_lang
+                    )
+
         head_tag = soup.find('head')
         if head_tag:
             title_element = head_tag.find('title')
             if title_element:
-                title_element.string = WebPage._translate_text(title_element.text, from_lang, to_lang)
-        
+                title_element.string = WebPage._translate_text(
+                    title_element.text, from_lang, to_lang
+                    )
+
         translated_html = soup.prettify()
         return translated_html
     
@@ -1504,11 +1595,11 @@ class WebPage:
 
         if file_path is None and html is None:
             raise ValueError("Arguments 'file_path' and 'html' are None")
-        
+
         if not file_path is None:
             if not os.path.isfile(file_path):
                 raise FileNotFoundError(f"File `{file_path}` does not exist")
-        
+
         from jinja2 import Environment, select_autoescape, Undefined
 
         class SilentUndefined(Undefined):
@@ -1525,7 +1616,7 @@ class WebPage:
         if html is None:
             with open(file_path, "r", encoding = "utf-8") as file:
                 html = file.read()
-                
+
         template = env.from_string(html)
 
         html = template.render(**args)
@@ -1544,8 +1635,11 @@ def render_template(
 
     :param file_name: The name of the template file to render.
     :param request: The request object providing information about the client's language preference.
-    :param template_dir: The directory path where template files are located. If not provided, defaults to the 'templates' directory in the current working directory.
-    :param template_language: The language code specifying the language of the template content. If not provided, defaults to 'en' (English).
+    :param template_dir: The directory path where template files are located. 
+                         If not provided, defaults to the 'templates' directory in the 
+                         current working directory.
+    :param template_language: The language code specifying the language of the template content. 
+                              If not provided, defaults to 'en' (English).
     :param **args: Additional keyword arguments to pass to the template rendering function.
 
     :return: The rendered HTML content of the template.
@@ -1554,8 +1648,9 @@ def render_template(
     if template_dir is None:
         template_dir = os.path.join(os.getcwd(), "templates")
 
-    if template_language is None: template_language = "en"
-    
+    if template_language is None:
+        template_language = "en"
+
     file_path = os.path.join(template_dir, file_name)
 
     client_language = WebPage.client_language(request)
@@ -1615,7 +1710,8 @@ def random_website_logo(name: str) -> str:
     draw = ImageDraw.Draw(image)
     draw.ellipse([(0, 0), (size, size)], fill=background_color)
 
-    brightness = 0.299 * background_color[0] + 0.587 * background_color[1] + 0.114 * background_color[2]
+    brightness = 0.299 * background_color[0] + 0.587\
+        * background_color[1] + 0.114 * background_color[2]
     text_color = (255, 255, 255) if brightness < 128 else (0, 0, 0)
 
     font = ImageFont.truetype(random_font(), 80)
@@ -1665,7 +1761,7 @@ def is_valid_image(image_data: bytes) -> bool:
 
     :param image_data: Bytes representing the image.
     """
-    
+
     try:
         import imghdr
         import magic
@@ -1730,36 +1826,133 @@ def macos_get_installer_and_volume_path() -> Tuple[Optional[str], Optional[str]]
             return None, None
     else:
         return None, None
-    
+
     return installer_path, volume_path
 
 DISTRO_TO_PACKAGE_MANAGER = {
-    "ubuntu": {"installation_command": "apt-get install", "update_command": "apt-get update; apt-get upgrade"},
-    "debian": {"installation_command": "apt-get install", "update_command": "apt-get update; apt-get upgrade"},
-    "fedora": {"installation_command": "dnf install", "update_command": "dnf upgrade"},
-    "centos": {"installation_command": "yum install", "update_command": "yum update"},
-    "arch": {"installation_command": "pacman -S", "update_command": "pacman -Syu"},
-    "opensuse": {"installation_command": "zypper install", "update_command": "zypper update"},
-    "linuxmint": {"installation_command": "apt-get install", "update_command": "apt-get update; apt-get upgrade"},
-    "gentoo": {"installation_command": "emerge", "update_command": "emerge --sync"},
-    "rhel": {"installation_command": "yum install", "update_command": "yum update"},
-    "kali": {"installation_command": "apt-get install", "update_command": "apt-get update; apt-get upgrade"},
-    "tails": {"installation_command": "apt-get install", "update_command": "apt-get update; apt-get upgrade"},
-    "zorin": {"installation_command": "apt-get install", "update_command": "apt-get update; apt-get upgrade"},
-    "mx": {"installation_command": "apt-get install", "update_command": "apt-get update; apt-get upgrade"},
-    "solus": {"installation_command": "eopkg install", "update_command": "eopkg up"},
-    "antergos": {"installation_command": "pacman -S", "update_command": "pacman -Syu"},
-    "lubuntu": {"installation_command": "apt-get install", "update_command": "apt-get update; apt-get upgrade"},
-    "xubuntu": {"installation_command": "apt-get install", "update_command": "apt-get update; apt-get upgrade"},
+    "ubuntu":
+        {
+            "installation_command": "apt-get install",
+            "update_command": "apt-get update; apt-get upgrade"
+        },
+    "debian": 
+        {
+            "installation_command": "apt-get install",
+            "update_command": "apt-get update; apt-get upgrade"
+        },
+    "fedora":
+        {
+            "installation_command": "dnf install",
+            "update_command": "dnf upgrade"
+        },
+    "centos":
+        {
+            "installation_command": "yum install",
+            "update_command": "yum update"
+        },
+    "arch":
+        {
+            "installation_command": "pacman -S",
+            "update_command": "pacman -Syu"
+        },
+    "opensuse":
+        {
+            "installation_command": "zypper install",
+            "update_command": "zypper update"
+        },
+    "linuxmint":
+        {
+            "installation_command": "apt-get install",
+            "update_command": "apt-get update; apt-get upgrade"
+        },
+    "gentoo":
+        {
+            "installation_command": "emerge",
+            "update_command": "emerge --sync"
+        },
+    "rhel":
+        {
+            "installation_command": "yum install",
+            "update_command": "yum update"
+        },
+    "kali":
+        {
+            "installation_command": "apt-get install",
+            "update_command": "apt-get update; apt-get upgrade"
+        },
+    "tails":
+        {
+            "installation_command": "apt-get install",
+            "update_command": "apt-get update; apt-get upgrade"
+        },
+    "zorin":
+        {
+            "installation_command": "apt-get install",
+            "update_command": "apt-get update; apt-get upgrade"
+        },
+    "mx":
+        {
+            "installation_command": "apt-get install",
+            "update_command": "apt-get update; apt-get upgrade"
+        },
+    "solus":
+        {
+            "installation_command": "eopkg install",
+            "update_command": "eopkg up"
+        },
+    "antergos":
+        {
+            "installation_command": "pacman -S",
+            "update_command": "pacman -Syu"
+        },
+    "lubuntu":
+        {
+            "installation_command": "apt-get install",
+            "update_command": "apt-get update; apt-get upgrade"
+        },
+    "xubuntu":
+        {
+            "installation_command": "apt-get install",
+            "update_command": "apt-get update; apt-get upgrade"
+        },
 }
+
 PACKAGE_MANAGERS = [
-    {"version_command": "apt-get --version", "installation_command": "apt-get install", "update_command": "apt-get update; apt-get upgrade"},
-    {"version_command": "dnf --version", "installation_command": "dnf install", "update_command": "dnf upgrade"},
-    {"version_command": "yum --version", "installation_command": "yum install", "update_command": "yum update"},
-    {"version_command": "pacman --version", "installation_command": "pacman -S", "update_command": "pacman -Syu"},
-    {"version_command": "zypper --version", "installation_command": "zypper install", "update_command": "zypper update"},
-    {"version_command": "emerge --version", "installation_command": "emerge", "update_command": "emerge --sync"},
-    {"version_command": "eopkg --version", "installation_command": "eopkg install", "update_command": "eopkg up"}
+    {
+        "version_command": "apt-get --version",
+        "installation_command": "apt-get install",
+        "update_command": "apt-get update; apt-get upgrade"
+    },
+    {
+        "version_command": "dnf --version",
+        "installation_command": "dnf install",
+        "update_command": "dnf upgrade"
+    },
+    {
+        "version_command": "yum --version",
+        "installation_command": "yum install",
+        "update_command": "yum update"
+    },
+    {
+        "version_command": "pacman --version",
+        "installation_command": "pacman -S",
+        "update_command": "pacman -Syu"
+    },
+    {
+        "version_command": "zypper --version",
+        "installation_command": "zypper install",
+        "update_command": "zypper update"
+    },
+    {
+        "version_command": "emerge --version",
+        "installation_command": "emerge",
+        "update_command": "emerge --sync"
+    },
+    {
+        "version_command": "eopkg --version",
+        "installation_command": "eopkg install",
+        "update_command": "eopkg up"
+    }
 ]
 
 class Linux:
@@ -1777,7 +1970,8 @@ class Linux:
             distro_id, {"installation_command": None, "update_command": None}
         )
 
-        installation_command, update_command = package_manager["installation_command"], package_manager["update_command"]
+        installation_command, update_command = \
+            package_manager["installation_command"], package_manager["update_command"]
 
         if None in [installation_command, update_command]:
             for package_manager in PACKAGE_MANAGERS:
@@ -1786,7 +1980,8 @@ class Linux:
                 except:
                     pass
                 else:
-                    installation_command, update_command = package_manager["installation_command"], package_manager["update_command"]
+                    installation_command, update_command = \
+                        package_manager["installation_command"], package_manager["update_command"]
 
         return installation_command, update_command
 
@@ -1813,19 +2008,25 @@ class Linux:
                 update_process.wait()
             except Exception as e:
                 if not quite:
-                    print(f"[Error] Error using update Command while installing linux package '{package_name}': '{e}'")
+                    print(f"""[Error] Error using update Command while
+                          installing linux package '{package_name}': '{e}'""")
 
-            install_process = subprocess.Popen(f"sudo {installation_command} {package_name} -y", shell=True)
-            install_process.wait()
+            with subprocess.Popen(
+                f"sudo {installation_command} {package_name} -y",
+                shell=True
+                ) as install_process:
+                install_process.wait()
         else:
-            print("[Error] No packet manager found for the current Linux system, you seem to use a distribution we don't know?")
+            print("""[Error] No packet manager found for the current
+                  Linux system, you seem to use a distribution we don't know?""")
 
         return None
 
 class GnuPG:
     "All functions that have something to do with GnuPG"
 
-    def get_path() -> str:
+    @property
+    def path(self) -> str:
         "Function to query the GnuPG path"
 
         system = get_system_architecture()
@@ -1847,9 +2048,13 @@ class GnuPG:
             print(f"[Error] Error when requesting pgp: '{e}'\n")
 
         return gnupg_path
-    
+
+    @staticmethod
     def get_download_link(session: Optional[Any] = None) -> Optional[str]:
-        "Request https://gnupg.org/download/ or https://gpgtools.org/ to get the latest download link"
+        """
+        Request https://gnupg.org/download/ or https://gpgtools.org/
+        to get the latest download link
+        """
 
         import requests
 
@@ -1857,7 +2062,7 @@ class GnuPG:
             requests.Session()
 
         system = get_system_architecture()
-        
+
         url = {"Windows": "https://gnupg.org/download/"}.get(system, "https://gpgtools.org/")
 
         while True:
@@ -1872,7 +2077,7 @@ class GnuPG:
                 session = requests.Session()
             else:
                 break
-        
+
         from bs4 import BeautifulSoup
 
         soup = BeautifulSoup(response.text, 'html.parser')
@@ -1883,10 +2088,16 @@ class GnuPG:
             href = anchor.get('href')
 
             if href:
-                if ("/ftp/gcrypt/binary/gnupg-w32-" in href and ".exe" in href and not ".sig" in href and system == "Windows"):
+                if "/ftp/gcrypt/binary/gnupg-w32-" in href\
+                        and ".exe" in href\
+                            and not ".sig" in href\
+                                and system == "Windows":
                     download_url = "https://gnupg.org" + href
                     break
-                elif ("https://releases.gpgtools.com/GPG_Suite-" in href and ".dmg" in href and not ".sig" in href and system == "macOS"):
+                elif "https://releases.gpgtools.com/GPG_Suite-" in href\
+                    and ".dmg" in href\
+                        and not ".sig" in href\
+                            and system == "macOS":
                     download_url = href
                     break
 
@@ -1902,7 +2113,7 @@ class Captcha:
 
         self.captcha_secret = captcha_secret
         self.data = data
-    
+
     def generate(self) -> Tuple[str, str]:
         "Generate a captcha for the client"
 
@@ -1922,7 +2133,7 @@ class Captcha:
         captcha_image_data = "data:image/png;base64," + captcha_image_data
 
         return captcha_image_data, crypted_captcha_prove
-    
+
     def verify(self, client_input: str, crypted_captcha_prove: str) -> bool:
         """
         Verify a captcha
