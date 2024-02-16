@@ -686,18 +686,18 @@ class FastHashing:
         self.salt = salt
         self.without_salt = without_salt
 
-    def hash(self, plain_text: str, hash_length: int = 8) -> str:
+    def hash(self, plain_text: str, salt_length: int = 8) -> str:
         """
         Function to hash a plaintext
 
         :param plain_text: The text to be hashed
-        :param hash_length: The length of the returned hashed value
+        :param salt_length: The length of the salt of the hash
         """
 
         if not self.without_salt:
             salt = self.salt
             if salt is None:
-                salt = secrets.token_hex(hash_length)
+                salt = secrets.token_hex(salt_length)
             plain_text = salt + plain_text
 
         hash_object = hashlib.sha256(plain_text.encode())
@@ -721,10 +721,10 @@ class FastHashing:
             if "//" in hashed_value:
                 hashed_value, salt = hashed_value.split("//")
 
-        hash_length = len(hashed_value)
+        salt_length = len(salt)
 
         comparison_hash = FastHashing(salt=salt, without_salt = self.without_salt)\
-            .hash(plain_text, hash_length = hash_length).split("//")[0]
+            .hash(plain_text, salt_length = salt_length).split("//")[0]
 
         return comparison_hash == hashed_value
 
@@ -1412,6 +1412,7 @@ class WebPage:
 
         language_from_args = request.args.get("language")
         language_from_cookies = request.cookies.get("language")
+        language_from_form = request.form.get("language")
 
         chosen_language = (
             language_from_args
@@ -1419,7 +1420,11 @@ class WebPage:
             else (
                 language_from_cookies
                 if language_from_cookies in LANGUAGE_CODES
-                else None
+                else (
+                    language_from_form
+                    if language_from_form in LANGUAGE_CODES
+                    else None
+                )
             )
         )
 
