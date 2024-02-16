@@ -1189,7 +1189,7 @@ def ipv4_to_ipv6(ipv4_address: str) -> Optional[str]:
 
     return str(ipv6_minimized)
 
-UNWANTED_IPS = ["127.0.0.1", "192.168.0.1", "10.0.0.1", "192.0.2.1", "198.51.100.1", "203.0.113.1"]#
+UNWANTED_IPS = ["127.0.0.1", "192.168.0.1", "10.0.0.1", "192.0.2.1", "198.51.100.1", "203.0.113.1"]
 IPV4_PATTERN = r'^(\d{1,3}\.){3}\d{1,3}$'
 IPV6_PATTERN = (
     r'^('
@@ -2001,6 +2001,8 @@ class Linux:
             with console.status("[green]Trying to get package manager..."):
                 installation_command, update_command = Linux.get_package_manager()
             console.print(f"[green]~ Package Manager is `{installation_command.split(' ')[0]}`")
+        else:
+            installation_command, update_command = Linux.get_package_manager()
 
         if not None in [installation_command, update_command]:
             try:
@@ -2017,8 +2019,9 @@ class Linux:
                 ) as install_process:
                 install_process.wait()
         else:
-            print("""[Error] No packet manager found for the current
-                  Linux system, you seem to use a distribution we don't know?""")
+            if not quite:
+                print("""[Error] No packet manager found for the current
+                      Linux system, you seem to use a distribution we don't know?""")
 
         return None
 
