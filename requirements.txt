@@ -2,7 +2,6 @@ cryptography
 ipaddress
 requests
 googletrans==3.1.0a0
-httpx>=0.23.0
 bs4
 pillow>=10.2.0
 python-magic
