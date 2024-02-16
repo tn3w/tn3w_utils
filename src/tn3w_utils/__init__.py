@@ -1544,7 +1544,7 @@ class WebPage:
                 text = ''.join(str(tag) for tag in outer_tag.contents)
             except:
                 text = html_tag.text
-      
+
             if "<" in text:
                 pattern = r'(<.*?>)(.*?)(<\/.*?>)'
 
@@ -1582,7 +1582,7 @@ class WebPage:
 
         translated_html = soup.prettify()
         return translated_html
-    
+
     @staticmethod
     def render_template(file_path: Optional[str] = None, html: Optional[str] = None, **args) -> str:
         """
