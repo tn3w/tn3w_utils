@@ -7,3 +7,4 @@ pillow>=10.2.0
 python-magic
 distro
 captcha
+httpx>=0.23.0 # not directly required, pinned by Snyk to avoid a vulnerability
